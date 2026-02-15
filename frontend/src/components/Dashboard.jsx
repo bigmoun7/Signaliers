@@ -1,22 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import Chart from './Chart';
+import SymbolSelector from './SymbolSelector';
 
 const Dashboard = () => {
   // Ensure API URL doesn't have a trailing slash
   const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
 
-  const [selectedSymbol, setSelectedSymbol] = useState("BTC");
-  const [selectedInterval, setSelectedInterval] = useState("1d");
-  const [assetType, setAssetType] = useState("CRYPTO"); // CRYPTO, STOCK
-  const [marketSource, setMarketSource] = useState("YAHOO"); // YAHOO, BINANCE, COINGECKO, STOCKBIT
+  const [selectedSymbol, setSelectedSymbol] = useState(() => localStorage.getItem("selectedSymbol") || "BTC");
+  const [selectedInterval, setSelectedInterval] = useState(() => localStorage.getItem("selectedInterval") || "1wk");
+  const [assetType, setAssetType] = useState(() => localStorage.getItem("assetType") || "CRYPTO"); // CRYPTO, STOCK
+  const [marketSource, setMarketSource] = useState(() => localStorage.getItem("marketSource") || "YAHOO"); // YAHOO, BINANCE, COINGECKO, STOCKBIT
   const [selectedStrategy, setSelectedStrategy] = useState("NONE"); // NONE, POPGUN
-  const [selectedPeriod, setSelectedPeriod] = useState("1y");
+  const [selectedPeriod, setSelectedPeriod] = useState(() => localStorage.getItem("selectedPeriod") || "6mo");
+
+  // Persistence Effects
+  useEffect(() => { localStorage.setItem("selectedSymbol", selectedSymbol); }, [selectedSymbol]);
+  useEffect(() => { localStorage.setItem("selectedInterval", selectedInterval); }, [selectedInterval]);
+  useEffect(() => { localStorage.setItem("assetType", assetType); }, [assetType]);
+  useEffect(() => { localStorage.setItem("marketSource", marketSource); }, [marketSource]);
+  useEffect(() => { localStorage.setItem("selectedPeriod", selectedPeriod); }, [selectedPeriod]);
 
   const STRATEGIES = [
     { id: 'NONE', label: 'No Strategy' },
     { id: 'POPGUN', label: 'PopGun Pattern' },
     { id: 'FVG', label: 'Smart Money Concept (FVG)' },
-    { id: 'RBD', label: 'Rally Base Drop (RBD)' }
+    { id: 'RBD', label: 'Rally Base Drop (RBD)' },
+    { id: 'AURA', label: 'Aura V14' },
+    { id: 'VOLUME_SURPRISE', label: 'Volume Surprise' }
   ];
 
   const PERIOD_OPTIONS = [
@@ -122,10 +132,6 @@ const Dashboard = () => {
     }, 1000); 
     return () => clearInterval(interval);
   }, []);
-
-  const handleSymbolChange = (e) => {
-    setSelectedSymbol(e.target.value);
-  };
 
   const handleIntervalChange = (e) => {
     setSelectedInterval(e.target.value);
@@ -243,12 +249,10 @@ const Dashboard = () => {
                     <div className="space-y-2">
                         <div className="flex flex-col">
                             <label className="text-xs text-gray-500 mb-1">Symbol</label>
-                            <input 
-                            type="text" 
-                            value={selectedSymbol}
-                            onChange={handleSymbolChange}
-                            className="border p-2 rounded w-full uppercase"
-                            placeholder="Symbol (e.g. BTC)" 
+                            <SymbolSelector 
+                                assetType={assetType}
+                                selectedSymbol={selectedSymbol}
+                                onSelect={(val) => setSelectedSymbol(val)}
                             />
                         </div>
                         <div className="flex gap-2">

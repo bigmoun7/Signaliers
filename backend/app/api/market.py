@@ -53,13 +53,75 @@ async def get_fvg_strategy(symbol: str, interval: str = "1d", source: str = "YAH
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/strategy/rbd/{symbol}", response_model=List[StrategySignal])
+async def get_rbd_strategy(symbol: str, interval: str = "1d", source: str = "YAHOO", period: Optional[str] = None):
+    """
+    Detects Rally-Base-Drop (RBD) Pivot Signals.
+    """
+    try:
+        data = await run_in_threadpool(fetcher.get_historical_data, symbol, interval=interval, limit=300, source=source, period=period)
+        if not data:
+             raise HTTPException(status_code=404, detail=f"Data historis tidak ditemukan untuk {symbol}")
+        
+        signals = Strategies.detect_rbd(data)
+        return signals
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/strategy/aura/{symbol}", response_model=List[StrategySignal])
+async def get_aura_strategy(symbol: str, interval: str = "1d", source: str = "YAHOO", period: Optional[str] = None):
+    """
+    Detects Aura V14 Signals.
+    """
+    try:
+        data = await run_in_threadpool(fetcher.get_historical_data, symbol, interval=interval, limit=300, source=source, period=period)
+        if not data:
+             raise HTTPException(status_code=404, detail=f"Data historis tidak ditemukan untuk {symbol}")
+        
+        signals = Strategies.detect_aura(data)
+        return signals
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/strategy/volume_surprise/{symbol}", response_model=List[StrategySignal])
+async def get_volume_surprise_strategy(symbol: str, interval: str = "1d", source: str = "YAHOO", period: Optional[str] = None):
+    """
+    Detects Volume Surprise Signals.
+    """
+    try:
+        data = await run_in_threadpool(fetcher.get_historical_data, symbol, interval=interval, limit=300, source=source, period=period)
+        if not data:
+             raise HTTPException(status_code=404, detail=f"Data historis tidak ditemukan untuk {symbol}")
+        
+        signals = Strategies.detect_volume_surprise(data)
+        return signals
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/indicator/volume_surprise/{symbol}", response_model=List[Dict])
+async def get_volume_surprise_indicator(symbol: str, interval: str = "1d", source: str = "YAHOO", period: Optional[str] = None):
+    """
+    Returns time-series data for Volume Surprise indicator (Volume vs Expected Volume).
+    """
+    try:
+        data = await run_in_threadpool(fetcher.get_historical_data, symbol, interval=interval, limit=300, source=source, period=period)
+        if not data:
+             raise HTTPException(status_code=404, detail=f"Data historis tidak ditemukan untuk {symbol}")
+        
+        results = Strategies.analyze_volume_surprise(data)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @router.get("/backtest/{strategy}/{symbol}", response_model=BacktestSummary)
 async def run_backtest(
     strategy: str, 
     symbol: str, 
     interval: str = "1d", 
     source: str = "YAHOO", 
-    period: str = "1y",
+    period: Optional[str] = None,
     initial_capital: float = 10000000
 ):
     """

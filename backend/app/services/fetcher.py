@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 import yfinance as yf
 import requests
@@ -87,7 +87,12 @@ class DataFetcher:
         if use_cache and cache_key in self.cache and cache_key in self.last_fetch:
             if (now - self.last_fetch[cache_key]).total_seconds() < 60:
                  # Return cached data (converted to list)
-                 return self._df_to_marketdata(self.cache[cache_key].tail(limit))
+                 data = self._df_to_marketdata(self.cache[cache_key].tail(limit))
+                 # Ensure timezone aware
+                 for d in data:
+                     if d.timestamp.tzinfo is None:
+                         d.timestamp = d.timestamp.replace(tzinfo=timezone.utc)
+                 return data
 
         try:
             if not period:
@@ -102,10 +107,18 @@ class DataFetcher:
                  return []
 
             # Update cache
+            # Remove duplicates based on index (Date/Datetime)
+            df = df[~df.index.duplicated(keep='last')]
+            
             self.cache[cache_key] = df
             self.last_fetch[cache_key] = now
             
-            return self._df_to_marketdata(df.tail(limit))
+            data = self._df_to_marketdata(df.tail(limit))
+            # Ensure timezone aware
+            for d in data:
+                if d.timestamp.tzinfo is None:
+                    d.timestamp = d.timestamp.replace(tzinfo=timezone.utc)
+            return data
             
         except Exception as e:
             print(f"Error fetching {yf_symbol} ({interval}): {e}")
@@ -128,24 +141,42 @@ class DataFetcher:
                 if not binance_symbol.endswith("USDT"):
                      binance_symbol += "USDT"
 
-                url = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval={binance_interval}&limit=1"
-                r = requests.get(url, timeout=2)
-                if r.status_code == 200:
-                    data = r.json()
-                    if data and len(data) > 0:
+                # Fetch Kline (for Open, High, Low of the period)
+                url_kline = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval={binance_interval}&limit=1"
+                # Fetch Ticker Price (for absolute latest Close)
+                url_price = f"https://api.binance.com/api/v3/ticker/price?symbol={binance_symbol}"
+                
+                print(f"DEBUG: Fetching Binance {url_kline}")
+                r_kline = requests.get(url_kline, timeout=2)
+                r_price = requests.get(url_price, timeout=2)
+                
+                if r_kline.status_code == 200 and r_price.status_code == 200:
+                    data = r_kline.json()
+                    price_data = r_price.json()
+                    
+                    if data and len(data) > 0 and 'price' in price_data:
                         kline = data[0]
+                        current_price = float(price_data['price'])
+                        
                         # Binance kline: [Open Time, Open, High, Low, Close, Volume, Close Time, ...]
                         # Timestamp is ms. Use UTC to match Yahoo Finance Crypto (usually UTC)
-                        ts = datetime.utcfromtimestamp(kline[0] / 1000)
+                        ts = datetime.fromtimestamp(kline[0] / 1000, tz=timezone.utc)
                         
-                        return MarketData(
+                        candle = MarketData(
                             timestamp=ts,
                             open=float(kline[1]),
                             high=float(kline[2]),
                             low=float(kline[3]),
-                            close=float(kline[4]),
+                            close=current_price, # Use ticker price for latest close
                             volume=float(kline[5])
                         )
+                        
+                        # Adjust High/Low with latest price
+                        if current_price > candle.high: candle.high = current_price
+                        if current_price < candle.low: candle.low = current_price
+                        
+                        print(f"DEBUG: Binance Success {symbol} {candle.close}")
+                        return candle
             except Exception as e:
                 print(f"Binance fetch failed: {e}")
                 pass
@@ -156,6 +187,9 @@ class DataFetcher:
         # Strategy: Get history (cached 60s) + Get Fast Info (Realtime)
         
         # 1. Get Base Candle from History (Cached)
+        # If we rely solely on cache, we might get stale data if fast_info fails.
+        # But for 'latest', maybe we should try to refresh if cache is old?
+        # For now keep use_cache=True to avoid rate limits.
         base_data = self.get_historical_data(symbol, interval=interval, limit=1, source=source, use_cache=True)
         if not base_data:
             return None
@@ -168,13 +202,40 @@ class DataFetcher:
              # fast_info access is usually faster than history()
              if hasattr(ticker, 'fast_info') and 'last_price' in ticker.fast_info:
                 current_price = ticker.fast_info['last_price']
+                
+                # Check for new day (Daily candle only)
+                is_new_day = False
+                if interval == '1d':
+                     last_date = candle.timestamp.date()
+                     today_date = datetime.now().date()
+                     if last_date < today_date:
+                         is_new_day = True
+
+                if is_new_day:
+                    # Create new candle for today
+                    print(f"DEBUG: Creating new daily candle for {symbol}")
+                    new_candle = MarketData(
+                        timestamp=datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0),
+                        open=ticker.fast_info.get('open', current_price),
+                        high=ticker.fast_info.get('day_high', current_price),
+                        low=ticker.fast_info.get('day_low', current_price),
+                        close=current_price,
+                        volume=ticker.fast_info.get('last_volume', 0)
+                    )
+                    return new_candle
+
                 if current_price and current_price > 0:
+                    print(f"DEBUG: Yahoo FastInfo {symbol} Old:{candle.close} New:{current_price}")
                     candle.close = current_price
                     # Update High/Low
                     if current_price > candle.high: candle.high = current_price
                     if current_price < candle.low: candle.low = current_price
                     # Note: We keep the timestamp from history to avoid "oldest data" error
-        except Exception:
+                    # Make sure timestamp is timezone-aware UTC
+                    if candle.timestamp.tzinfo is None:
+                        candle.timestamp = candle.timestamp.replace(tzinfo=timezone.utc)
+        except Exception as e:
+            # print(f"DEBUG: Yahoo FastInfo Failed {e}")
             pass
             
         return candle

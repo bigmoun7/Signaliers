@@ -16,6 +16,9 @@ class Backtester:
         elif strategy_name == "FVG":
             signals = Strategies.detect_fvg(self.data)
             return self._test_fvg(signals)
+        elif strategy_name == "RBD":
+            signals = Strategies.detect_rbd(self.data)
+            return self._test_rbd(signals)
         else:
             return BacktestSummary(
                 strategy=strategy_name,
@@ -175,6 +178,10 @@ class Backtester:
             for i in range(idx + 1, len(self.data)):
                 bar = self.data[i]
                 
+                # Prevent same-candle exit if timestamps are identical (e.g. duplicates)
+                if bar.timestamp <= signal.timestamp:
+                    continue
+                
                 # Check Entry (Price dips into FVG)
                 if trade is None:
                     if bar.low <= entry_price:
@@ -254,6 +261,116 @@ class Backtester:
         
         return BacktestSummary(
             strategy="FVG",
+            total_trades=total,
+            wins=wins,
+            losses=losses,
+            win_rate=(wins/total * 100) if total > 0 else 0,
+            total_pnl=total_pnl,
+            trades=trades
+        )
+
+    def _test_rbd(self, signals: List[StrategySignal]) -> BacktestSummary:
+        trades = []
+        ts_map = {d.timestamp: i for i, d in enumerate(self.data)}
+        
+        for signal in signals:
+            idx = ts_map.get(signal.timestamp)
+            if idx is None or idx >= len(self.data) - 1:
+                continue
+            
+            meta = signal.metadata
+            entry_price = signal.price
+            sl = meta.get("sl")
+            tp = meta.get("tp")
+            
+            if not sl or not tp:
+                continue
+
+            trade = {
+                "entry_date": signal.timestamp, # Entry at close of signal candle
+                "entry_price": entry_price,
+                "position": "LONG" if signal.type == "BULLISH" else "SHORT",
+                "status": "OPEN",
+                "invested": self.initial_capital,
+            }
+
+            # Simulate trade starting from NEXT candle
+            for i in range(idx + 1, len(self.data)):
+                bar = self.data[i]
+                
+                # Prevent same-candle exit if timestamps are identical (e.g. duplicates)
+                if bar.timestamp <= trade["entry_date"]:
+                    continue
+                
+                # Check SL/TP
+                if trade["position"] == "LONG":
+                    # Check Low for SL
+                    if bar.low <= sl:
+                        trade["exit_price"] = sl
+                        trade["exit_date"] = bar.timestamp
+                        trade["status"] = "LOSS"
+                        break
+                    # Check High for TP
+                    if bar.high >= tp:
+                        trade["exit_price"] = tp
+                        trade["exit_date"] = bar.timestamp
+                        trade["status"] = "WIN"
+                        break
+                else: # SHORT
+                    # Check High for SL
+                    if bar.high >= sl:
+                        trade["exit_price"] = sl
+                        trade["exit_date"] = bar.timestamp
+                        trade["status"] = "LOSS"
+                        break
+                    # Check Low for TP
+                    if bar.low <= tp:
+                        trade["exit_price"] = tp
+                        trade["exit_date"] = bar.timestamp
+                        trade["status"] = "WIN"
+                        break
+
+            # Calculate PnL if trade closed or still open
+            if trade["status"] == "OPEN":
+                trade["exit_price"] = self.data[-1].close
+                trade["exit_date"] = self.data[-1].timestamp
+            
+            entry = trade["entry_price"]
+            exit_p = trade["exit_price"]
+            
+            if trade["position"] == "LONG":
+                pnl_pct = (exit_p - entry) / entry
+            else:
+                pnl_pct = (entry - exit_p) / entry
+            
+            # Value Calc
+            # Invested (IDR) -> Convert to USD -> Buy Asset
+            usd_capital = trade["invested"] / self.exchange_rate
+            
+            # Simplified PnL
+            pnl_usd = usd_capital * pnl_pct
+            pnl_idr = pnl_usd * self.exchange_rate
+            
+            trades.append(TradeResult(
+                entry_date=trade["entry_date"],
+                exit_date=trade["exit_date"],
+                entry_price=entry,
+                exit_price=exit_p,
+                position=trade["position"],
+                status=trade["status"],
+                pnl=pnl_idr,
+                pnl_percent=pnl_pct * 100,
+                invested=trade["invested"],
+                realized_value=trade["invested"] + pnl_idr
+            ))
+
+        wins = len([t for t in trades if t.status == "WIN"])
+        losses = len([t for t in trades if t.status == "LOSS"])
+        total = len(trades)
+        total_pnl = sum([t.pnl for t in trades])
+        
+        return BacktestSummary(
+            strategy="RBD",
             total_trades=total,
             wins=wins,
             losses=losses,
