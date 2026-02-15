@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Chart from './Chart';
 
 const Dashboard = () => {
+  // Ensure API URL doesn't have a trailing slash
+  const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+
   const [signals, setSignals] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState("BTC");
   const [selectedInterval, setSelectedInterval] = useState("1d");
@@ -77,7 +80,7 @@ const Dashboard = () => {
         source: marketSource
       });
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/market-scan?${queryParams}`);
+      const response = await fetch(`${API_URL}/api/market-scan?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch signals');
       const data = await response.json();
       setSignals(data);
@@ -107,7 +110,7 @@ const Dashboard = () => {
             initial_capital: initialCapital
         });
 
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/backtest/${selectedStrategy}/${selectedSymbol}?${queryParams}`);
+        const response = await fetch(`${API_URL}/api/backtest/${selectedStrategy}/${selectedSymbol}?${queryParams}`);
         
         if (!response.ok) {
             const errorData = await response.json();
@@ -125,7 +128,7 @@ const Dashboard = () => {
 
   const fetchPaperStatus = async () => {
       try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/paper/status`);
+          const response = await fetch(`${API_URL}/api/paper/status`);
           if (response.ok) {
               const data = await response.json();
               setPaperStatus(data);
@@ -139,7 +142,7 @@ const Dashboard = () => {
       if (selectedStrategy === "NONE") return;
       setPaperLoading(true);
       try {
-          await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/paper/start?symbol=${selectedSymbol}&strategy=${selectedStrategy}&capital=${initialCapital}`, { method: 'POST' });
+          await fetch(`${API_URL}/api/paper/start?symbol=${selectedSymbol}&strategy=${selectedStrategy}&capital=${initialCapital}`, { method: 'POST' });
           fetchPaperStatus();
       } catch (err) {
           console.error(err);
@@ -151,7 +154,7 @@ const Dashboard = () => {
   const handleStopPaper = async () => {
       setPaperLoading(true);
       try {
-          await fetch('http://127.0.0.1:8000/api/paper/stop', { method: 'POST' });
+          await fetch(`${API_URL}/api/paper/stop`, { method: 'POST' });
           fetchPaperStatus();
       } catch (err) {
           console.error(err);

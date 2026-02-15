@@ -8,6 +8,9 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
   const markersRef = useRef([]); // Store markers to clear them if needed
   const priceLinesRef = useRef([]); // Store price lines to clear them
 
+  // Ensure API URL doesn't have a trailing slash
+  const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -51,7 +54,7 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
     const fetchHistory = async () => {
       try {
         const p = period || '1y';
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/history/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
+        const response = await fetch(`${API_URL}/api/history/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
         if (!response.ok) throw new Error("Failed to fetch history");
         const data = await response.json();
         
@@ -93,7 +96,7 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
         // Fetch Strategy Data if selected
         if (strategy && strategy !== "NONE") {
              if (strategy === "POPGUN") {
-                 const stratResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/strategy/popgun/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
+                 const stratResponse = await fetch(`${API_URL}/api/strategy/popgun/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
                  if (stratResponse.ok) {
                      const signals = await stratResponse.json();
                      
@@ -140,7 +143,7 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
                      }
                  }
              } else if (strategy === "FVG") {
-                 const stratResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/strategy/fvg/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
+                 const stratResponse = await fetch(`${API_URL}/api/strategy/fvg/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
                  if (stratResponse.ok) {
                      const signals = await stratResponse.json();
                      
