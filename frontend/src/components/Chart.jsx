@@ -51,7 +51,7 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
     const fetchHistory = async () => {
       try {
         const p = period || '1y';
-        const response = await fetch(`http://127.0.0.1:8000/api/history/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/history/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
         if (!response.ok) throw new Error("Failed to fetch history");
         const data = await response.json();
         
@@ -93,7 +93,7 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
         // Fetch Strategy Data if selected
         if (strategy && strategy !== "NONE") {
              if (strategy === "POPGUN") {
-                 const stratResponse = await fetch(`http://127.0.0.1:8000/api/strategy/popgun/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
+                 const stratResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/strategy/popgun/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
                  if (stratResponse.ok) {
                      const signals = await stratResponse.json();
                      
@@ -140,7 +140,7 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
                      }
                  }
              } else if (strategy === "FVG") {
-                 const stratResponse = await fetch(`http://127.0.0.1:8000/api/strategy/fvg/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
+                 const stratResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/api/strategy/fvg/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
                  if (stratResponse.ok) {
                      const signals = await stratResponse.json();
                      
