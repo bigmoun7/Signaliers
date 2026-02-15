@@ -192,7 +192,70 @@ const Chart = ({ symbol, interval, source, strategy, period }) => {
                          });
                      }
                  }
+             } else if (strategy === "RBD") {
+                 const stratResponse = await fetch(`${API_URL}/api/strategy/rbd/${symbol}?interval=${interval}&source=${source || 'YAHOO'}&period=${p}`);
+                 if (stratResponse.ok) {
+                     const signals = await stratResponse.json();
+                     
+                     const markers = [];
+                     
+                     signals.forEach(s => {
+                         const meta = s.metadata;
+                         const pivotType = meta.pivot_type; // DBR (Bullish) or RBD (Bearish)
+                         const color = pivotType === "DBR" ? '#4caf50' : '#f44336';
+                         const shape = pivotType === "DBR" ? 'arrowUp' : 'arrowDown';
+                         const position = pivotType === "DBR" ? 'belowBar' : 'aboveBar';
+                         const text = pivotType;
+                         
+                         markers.push({
+                             time: new Date(s.timestamp).getTime() / 1000,
+                             position: position,
+                             color: color,
+                             shape: shape,
+                             text: text,
+                         });
+                     });
+                     
+                     newSeries.setMarkers(markers);
+                     
+                     // Visualize Zones for the LAST 2 signals to avoid clutter
+                     if (signals.length > 0) {
+                         const recentSignals = signals.slice(-2);
+                         
+                         // Clear previous lines
+                         priceLinesRef.current = [];
+                         
+                         recentSignals.forEach((sig, idx) => {
+                             const { zone_top, zone_bottom, pivot_type } = sig.metadata;
+                             const color = pivot_type === "DBR" ? '#4caf50' : '#f44336';
+                             const label = pivot_type;
+                             
+                             // Top Line
+                             const lineTop = newSeries.createPriceLine({
+                                 price: zone_top,
+                                 color: color,
+                                 lineWidth: 1,
+                                 lineStyle: 0, // Solid
+                                 axisLabelVisible: true,
+                                 title: `${label} Top`,
+                             });
+                             priceLinesRef.current.push(lineTop);
+
+                             // Bottom Line
+                             const lineBottom = newSeries.createPriceLine({
+                                 price: zone_bottom,
+                                 color: color,
+                                 lineWidth: 1,
+                                 lineStyle: 0, // Solid
+                                 axisLabelVisible: true,
+                                 title: `${label} Bot`,
+                             });
+                             priceLinesRef.current.push(lineBottom);
+                         });
+                     }
+                 }
              }
+
         }
         
       } catch (err) {
