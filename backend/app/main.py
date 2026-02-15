@@ -21,6 +21,8 @@ origins = [
     "http://127.0.0.1:5175",
     "http://127.0.0.1:5176",
     "http://127.0.0.1:5177",
+    "https://signaliers.vercel.app", # Vercel Deployment
+    "*", # Allow all for development/testing
 ]
 
 app.add_middleware(
